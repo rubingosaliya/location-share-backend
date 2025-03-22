@@ -9,30 +9,24 @@ app.use((req, res, next) => {
   next();
 });
 
-// Force fresh redeploy
 let locations = {};
 
 app.post('/locations/:sessionId', (req, res) => {
   const { sessionId } = req.params;
   const { lat, lng, name } = req.body;
+  console.log('Received:', req.body); // Log raw body
   if (!locations[sessionId]) {
     locations[sessionId] = [];
   }
-  locations[sessionId].push({ lat, lng, name });
-  console.log(`Added to ${sessionId}:`, { lat, lng, name });
-  setTimeout(() => {
-    delete locations[sessionId];
-    console.log(`Cleared session ${sessionId}`);
-  }, 3600000);
+  locations[sessionId].push({ lat, lng, name: name || 'Test' }); // Force name
+  console.log('Stored:', locations[sessionId]);
   res.send('Location added');
 });
 
 app.get('/locations/:sessionId', (req, res) => {
   const { sessionId } = req.params;
-  console.log(`Sending for ${sessionId}:`, locations[sessionId] || []);
+  console.log('Returning:', locations[sessionId] || []);
   res.json({ locations: locations[sessionId] || [] });
 });
 
 module.exports = app;
-
-
