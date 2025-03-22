@@ -9,7 +9,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Force redeploy
+// Force fresh redeploy
 let locations = {};
 
 app.post('/locations/:sessionId', (req, res) => {
