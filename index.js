@@ -1,6 +1,11 @@
 const express = require('express');
 const app = express();
 
+// Root endpoint to respond to basic GET requests
+app.get('/', (req, res) => {
+  res.send('Location Share Backend is up and running!');
+});
+
 // Allow JSON data and cross-origin requests
 app.use(express.json());
 app.use((req, res, next) => {
