@@ -25,15 +25,13 @@ app.post('/locations/:sessionId', (req, res) => {
   if (!locations[sessionId]) {
     locations[sessionId] = [];
   }
-  locations[sessionId].push({ lat, lng, name }); // Store name along with location
+  locations[sessionId].push({ lat, lng, name }); // Store name
   console.log(`Added to ${sessionId}:`, { lat, lng, name }); // Debug log
-
   // Clear after 60 minutes (3600000 milliseconds)
   setTimeout(() => {
     delete locations[sessionId];
     console.log(`Cleared session ${sessionId}`);
   }, 3600000);
-
   res.send('Location added');
 });
 
@@ -44,13 +42,7 @@ app.get('/locations/:sessionId', (req, res) => {
   res.json({ locations: locations[sessionId] || [] });
 });
 
-// Start the server
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-});
-
-// Export the handler for Vercel serverless function (if using Vercel)
+// Export the handler for Vercel serverless function
 module.exports = (req, res) => {
   app(req, res);
 };
