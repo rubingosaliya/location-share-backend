@@ -21,24 +21,17 @@ let locations = {};
 // POST endpoint to receive a location with name
 app.post('/locations/:sessionId', (req, res) => {
   const { sessionId } = req.params;
-  const { lat, lng, name } = req.body; // Ensure the name is being sent
-
-  if (!name) {
-    return res.status(400).send("Name is required.");
-  }
-
+  const { lat, lng, name } = req.body; // Add name here
   if (!locations[sessionId]) {
     locations[sessionId] = [];
   }
   locations[sessionId].push({ lat, lng, name }); // Store name
   console.log(`Added to ${sessionId}:`, { lat, lng, name }); // Debug log
-
   // Clear after 60 minutes (3600000 milliseconds)
   setTimeout(() => {
     delete locations[sessionId];
     console.log(`Cleared session ${sessionId}`);
   }, 3600000);
-
   res.send('Location added');
 });
 
