@@ -14,11 +14,12 @@ let locations = {};
 app.post('/locations/:sessionId', (req, res) => {
   const { sessionId } = req.params;
   const { lat, lng, name } = req.body;
-  console.log('Received:', req.body); // Log raw body
+  console.log('Received:', req.body);
   if (!locations[sessionId]) {
     locations[sessionId] = [];
   }
-  locations[sessionId].push({ lat, lng, name: name || 'Test' }); // Force name
+  // Hardcode name for testing
+  locations[sessionId].push({ lat, lng, name: name || 'ForcedName' });
   console.log('Stored:', locations[sessionId]);
   res.send('Location added');
 });
