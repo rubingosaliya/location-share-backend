@@ -11,4 +11,8 @@ app.get('/test', (req, res) => {
   res.json({ message: 'Test works', name: 'Rubin' });
 });
 
-module.exports = app;
+// Explicit export for Vercel
+module.exports = {
+  path: '/api',
+  handler: app
+};
