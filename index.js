@@ -1,49 +1,68 @@
 const express = require('express');
 const app = express();
+const http = require('http').Server(app);
+const io = require('socket.io')(http);
+const cors = require('cors');
 
-// Root endpoint to respond to basic GET requests
-app.get('/', (req, res) => {
-  res.send('Location Share Backend is up and running!');
-});
-
-// Allow JSON data and cross-origin requests
+app.use(cors());
+app.use(express.static('public'));
 app.use(express.json());
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
-  next();
+
+let events = {};  // Stores event details
+let locations = {};  // Stores live locations
+
+// Create Event
+app.get('/createEvent', (req, res) => {
+    const duration = parseInt(req.query.duration);
+    if (!duration || duration > 6) return res.status(400).json({ error: "Invalid duration" });
+
+    const sessionId = `event_${Date.now()}`;
+    events[sessionId] = {
+        expiresAt: Date.now() + duration * 3600000, // Convert hours to ms
+        owner: null
+    };
+
+    res.json({ sessionId });
 });
 
-// Store locations in memory (temporary for testing)
-let locations = {};
+// WebSocket Connection for Live Updates
+io.on('connection', (socket) => {
+    let sessionId;
+    let userId = socket.id;
 
-// POST endpoint to receive a location with name
-app.post('/locations/:sessionId', (req, res) => {
-  const { sessionId } = req.params;
-  const { lat, lng, name } = req.body; // Add name here
-  if (!locations[sessionId]) {
-    locations[sessionId] = [];
-  }
-  locations[sessionId].push({ lat, lng, name }); // Store name
-  console.log(`Added to ${sessionId}:`, { lat, lng, name }); // Debug log
-  // Clear after 60 minutes (3600000 milliseconds)
-  setTimeout(() => {
-    delete locations[sessionId];
-    console.log(`Cleared session ${sessionId}`);
-  }, 3600000);
-  res.send('Location added');
+    socket.on('joinEvent', (data) => {
+        sessionId = data.sessionId;
+        if (!events[sessionId] || Date.now() > events[sessionId].expiresAt) {
+            return socket.emit('error', 'Event expired or invalid');
+        }
+
+        locations[userId] = { ...data, active: true };
+        io.to(sessionId).emit('updateLocations', Object.values(locations));
+        socket.join(sessionId);
+    });
+
+    socket.on('updateLocation', (data) => {
+        if (locations[userId]) {
+            locations[userId] = { ...locations[userId], lat: data.lat, lng: data.lng, active: true };
+            io.to(sessionId).emit('updateLocations', Object.values(locations));
+        }
+    });
+
+    socket.on('stopSharing', () => {
+        if (locations[userId]) {
+            locations[userId].active = false;
+            io.to(sessionId).emit('updateLocations', Object.values(locations));
+        }
+    });
+
+    socket.on('disconnect', () => {
+        if (locations[userId]) {
+            locations[userId].active = false;
+            io.to(sessionId).emit('updateLocations', Object.values(locations));
+        }
+    });
 });
 
-// GET endpoint to send all locations for a session
-app.get('/locations/:sessionId', (req, res) => {
-  const { sessionId } = req.params;
-  console.log(`Sending for ${sessionId}:`, locations[sessionId] || []); // Debug log
-  res.json({ locations: locations[sessionId] || [] });
-});
-
-// Export the handler for Vercel serverless function
-module.exports = (req, res) => {
-  app(req, res);
-};
+// Start Server
+http.listen(3000, () => console.log('Server running on port 3000'));
 
