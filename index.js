@@ -16,19 +16,24 @@ app.get('/', (req, res) => {
   res.send('Location Share Backend - Use /createEvent, /updateLocation, or /getLocations');
 });
 
-// Create a new session (optional)
+// Create a new session
 app.get('/createEvent', async (req, res) => {
   try {
-    const { duration } = req.query;
+    const { duration, creatorName } = req.query;
     const durationHours = parseFloat(duration);
     if (isNaN(durationHours) || durationHours <= 0 || durationHours > 24) {
       return res.status(400).send('Invalid duration: must be between 0 and 24 hours');
     }
     const sessionId = Math.random().toString(36).substr(2, 9);
     const expirationTime = Date.now() + durationHours * 3600000;
-    await kv.set(`session:${sessionId}`, { expirationTime }, { ex: Math.ceil(durationHours * 3600) });
+    // Store creatorName with session data
+    await kv.set(
+      `session:${sessionId}`,
+      { expirationTime, creatorName: creatorName || 'Anonymous' },
+      { ex: Math.ceil(durationHours * 3600) }
+    );
     const shareLink = `https://rubingosaliya.github.io/location-share-test/?session=${sessionId}`;
-    res.json({ sessionId, shareLink, expiresAt: expirationTime });
+    res.json({ sessionId, shareLink, expiresAt: expirationTime, creatorName: creatorName || 'Anonymous' });
   } catch (error) {
     console.error('Error in createEvent:', error);
     res.status(500).send('Server error');
@@ -84,6 +89,24 @@ app.get('/getLocations', async (req, res) => {
     res.json({ locations });
   } catch (error) {
     console.error('Error in getLocations:', error);
+    res.status(500).send('Server error');
+  }
+});
+
+// New endpoint to get session details (including creatorName)
+app.get('/getSession', async (req, res) => {
+  try {
+    const { sessionId } = req.query;
+    if (!sessionId) {
+      return res.status(400).send('Missing sessionId');
+    }
+    const session = await kv.get(`session:${sessionId}`);
+    if (!session || Date.now() > session.expirationTime) {
+      return res.status(410).send('Session expired or invalid');
+    }
+    res.json({ creatorName: session.creatorName });
+  } catch (error) {
+    console.error('Error in getSession:', error);
     res.status(500).send('Server error');
   }
 });
