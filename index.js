@@ -42,9 +42,9 @@ app.post('/updateLocation', async (req, res) => {
     if (!userName || !lat || !lng || !shareUntil) {
       return res.status(400).send('Missing required fields');
     }
-    if (accuracy > 50) {
-      return res.status(200).send('Location ignored due to low accuracy');
-    }
+    //if (accuracy > 50) {
+    //  return res.status(200).send('Location ignored due to low accuracy');
+    //}
 
     let sessionExpiration = Infinity;
     if (sessionId) {
