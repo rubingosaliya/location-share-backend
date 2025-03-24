@@ -11,12 +11,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// Root endpoint
 app.get('/', (req, res) => {
   res.send('Location Share Backend - Use /createEvent, /updateLocation, or /getLocations');
 });
 
-// Create a new session
 app.get('/createEvent', async (req, res) => {
   try {
     const { duration } = req.query;
@@ -28,7 +26,7 @@ app.get('/createEvent', async (req, res) => {
     const expirationTime = Date.now() + durationHours * 3600000;
     await kv.set(
       `session:${sessionId}`,
-      { expirationTime }, // No creatorName initially
+      { expirationTime },
       { ex: Math.ceil(durationHours * 3600) }
     );
     const shareLink = `https://rubingosaliya.github.io/location-share-test/?session=${sessionId}`;
@@ -39,16 +37,15 @@ app.get('/createEvent', async (req, res) => {
   }
 });
 
-// Update user's location
 app.post('/updateLocation', async (req, res) => {
   try {
-    const { sessionId, lat, lng, userName, shareUntil, accuracy } = req.body;
-    if (!userName || !lat || !lng || !shareUntil) {
-      return res.status(400).send('Missing required fields');
+    const { sessionId, lat, lng, userName, shareUntil, clientId, accuracy } = req.body;
+    if (!userName || !shareUntil || !clientId) {
+      return res.status(400).send('Missing required fields: userName, shareUntil, clientId');
     }
-    //if (accuracy > 50) {
-    //  return res.status(200).send('Location ignored due to low accuracy');
-    //}
+    if (!lat || !lng) {
+      return res.status(400).send('Missing location data');
+    }
 
     let sessionExpiration = Infinity;
     if (sessionId) {
@@ -57,7 +54,6 @@ app.post('/updateLocation', async (req, res) => {
         return res.status(400).send('Session has expired or is invalid');
       }
       if (!session.creatorName) {
-        // Set creatorName on first location update
         session.creatorName = userName;
         await kv.set(`session:${sessionId}`, session, { ex: Math.ceil((session.expirationTime - Date.now()) / 1000) });
       }
@@ -70,6 +66,11 @@ app.post('/updateLocation', async (req, res) => {
     locations = locations.filter(loc => loc.name !== userName);
     locations.push({ lat, lng, name: userName, active: Date.now() < effectiveExpiration });
     await kv.set(userKey, locations, { ex: Math.ceil((effectiveExpiration - Date.now()) / 1000) });
+
+    // Store client-specific data
+    const clientKey = `session:${sessionId}:client:${clientId}`;
+    await kv.set(clientKey, { userName, shareUntil }, { ex: Math.ceil((effectiveExpiration - Date.now()) / 1000) });
+
     res.send('Location added');
   } catch (error) {
     console.error('Error in updateLocation:', error);
@@ -77,7 +78,6 @@ app.post('/updateLocation', async (req, res) => {
   }
 });
 
-// Get all locations
 app.get('/getLocations', async (req, res) => {
   try {
     const { sessionId, userName } = req.query;
@@ -97,10 +97,9 @@ app.get('/getLocations', async (req, res) => {
   }
 });
 
-// Get session details (including creatorName)
 app.get('/getSession', async (req, res) => {
   try {
-    const { sessionId } = req.query;
+    const { sessionId, clientId } = req.query;
     if (!sessionId) {
       return res.status(400).send('Missing sessionId');
     }
@@ -108,7 +107,12 @@ app.get('/getSession', async (req, res) => {
     if (!session || Date.now() > session.expirationTime) {
       return res.status(410).send('Session expired or invalid');
     }
-    res.json({ creatorName: session.creatorName || 'Anonymous' }); // Default to 'Anonymous' if not set
+    let clientData = {};
+    if (clientId) {
+      const clientKey = `session:${sessionId}:client:${clientId}`;
+      clientData = (await kv.get(clientKey)) || {};
+    }
+    res.json({ creatorName: session.creatorName || 'Anonymous', ...clientData });
   } catch (error) {
     console.error('Error in getSession:', error);
     res.status(500).send('Server error');
