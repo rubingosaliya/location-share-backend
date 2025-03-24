@@ -19,21 +19,20 @@ app.get('/', (req, res) => {
 // Create a new session
 app.get('/createEvent', async (req, res) => {
   try {
-    const { duration, creatorName } = req.query;
+    const { duration } = req.query;
     const durationHours = parseFloat(duration);
     if (isNaN(durationHours) || durationHours <= 0 || durationHours > 24) {
       return res.status(400).send('Invalid duration: must be between 0 and 24 hours');
     }
     const sessionId = Math.random().toString(36).substr(2, 9);
     const expirationTime = Date.now() + durationHours * 3600000;
-    // Store creatorName with session data
     await kv.set(
       `session:${sessionId}`,
-      { expirationTime, creatorName: creatorName || 'Anonymous' },
+      { expirationTime }, // No creatorName initially
       { ex: Math.ceil(durationHours * 3600) }
     );
     const shareLink = `https://rubingosaliya.github.io/location-share-test/?session=${sessionId}`;
-    res.json({ sessionId, shareLink, expiresAt: expirationTime, creatorName: creatorName || 'Anonymous' });
+    res.json({ sessionId, shareLink, expiresAt: expirationTime });
   } catch (error) {
     console.error('Error in createEvent:', error);
     res.status(500).send('Server error');
@@ -56,6 +55,11 @@ app.post('/updateLocation', async (req, res) => {
       const session = await kv.get(`session:${sessionId}`);
       if (!session || Date.now() > session.expirationTime) {
         return res.status(400).send('Session has expired or is invalid');
+      }
+      if (!session.creatorName) {
+        // Set creatorName on first location update
+        session.creatorName = userName;
+        await kv.set(`session:${sessionId}`, session, { ex: Math.ceil((session.expirationTime - Date.now()) / 1000) });
       }
       sessionExpiration = session.expirationTime;
     }
@@ -93,7 +97,7 @@ app.get('/getLocations', async (req, res) => {
   }
 });
 
-// New endpoint to get session details (including creatorName)
+// Get session details (including creatorName)
 app.get('/getSession', async (req, res) => {
   try {
     const { sessionId } = req.query;
@@ -104,7 +108,7 @@ app.get('/getSession', async (req, res) => {
     if (!session || Date.now() > session.expirationTime) {
       return res.status(410).send('Session expired or invalid');
     }
-    res.json({ creatorName: session.creatorName });
+    res.json({ creatorName: session.creatorName || 'Anonymous' }); // Default to 'Anonymous' if not set
   } catch (error) {
     console.error('Error in getSession:', error);
     res.status(500).send('Server error');
