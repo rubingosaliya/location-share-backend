@@ -1,134 +1,48 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Location Share</title>
-    <!-- Replace 'YOUR_API_KEY' with your actual Google Maps API key -->
-    <script async src="https://maps.google.com/maps/api/js?key=AIzaSyCtk-cv518k28_YbwytXpeu3-DAg92mAA4&callback=initMap"></script>
+const express = require('express');
+const app = express();
 
-    <style>
-        #map {
-            height: 400px; /* Set the height of the map */
-            width: 100%;   /* Set the width of the map */
-        }
-    </style>
-</head>
-<body>
-    <h1>Location Share</h1>
-    <div id="map"></div>
+// Root endpoint to respond to basic GET requests
+app.get('/', (req, res) => {
+  res.send('Location Share Backend is up and running!');
+});
 
-    <script>
-        function initMap() {
-            console.log("initMap started");
+// Allow JSON data and cross-origin requests
+app.use(express.json());
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  next();
+});
 
-            // Get session ID from URL params
-            const urlParams = new URLSearchParams(window.location.search);
-            const sessionId = urlParams.get('session');
-            if (!sessionId) {
-                alert("Please provide a session ID in the URL, e.g., ?session=abc123");
-                return;
-            }
-            console.log("Session ID found: " + sessionId);
+// Store locations in memory (temporary for testing)
+let locations = {};
 
-            // Prompt for user name
-            let userName = prompt("Please enter your name:");
-            if (!userName) {
-                userName = "Anonymous";
-                console.log("No name entered, defaulting to Anonymous");
-            } else {
-                console.log("User entered name: " + userName);
-            }
+// POST endpoint to receive a location with name
+app.post('/locations/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  const { lat, lng, name } = req.body; // Add name here
+  if (!locations[sessionId]) {
+    locations[sessionId] = [];
+  }
+  locations[sessionId].push({ lat, lng, name }); // Store name
+  console.log(`Added to ${sessionId}:`, { lat, lng, name }); // Debug log
+  // Clear after 60 minutes (3600000 milliseconds)
+  setTimeout(() => {
+    delete locations[sessionId];
+    console.log(`Cleared session ${sessionId}`);
+  }, 3600000);
+  res.send('Location added');
+});
 
-            // Initialize map centered on a default location
-            var map = new google.maps.Map(document.getElementById('map'), {
-                center: { lat: 0, lng: 0 },
-                zoom: 2
-            });
-            console.log("Map initialized successfully");
+// GET endpoint to send all locations for a session
+app.get('/locations/:sessionId', (req, res) => {
+  const { sessionId } = req.params;
+  console.log(`Sending for ${sessionId}:`, locations[sessionId] || []); // Debug log
+  res.json({ locations: locations[sessionId] || [] });
+});
 
-            // Set the map to the user's current location if available
-            function setMapToUserLocation() {
-                if (navigator.geolocation) {
-                    console.log("Requesting user location...");
-                    navigator.geolocation.getCurrentPosition(function(position) {
-                        var userLat = position.coords.latitude;
-                        var userLng = position.coords.longitude;
-                        console.log("User location: lat=" + userLat + ", lng=" + userLng);
-                        map.setCenter({ lat: userLat, lng: userLng });
-                        map.setZoom(15);
-                        console.log("Map zoomed to user location");
-                    }, function(error) {
-                        console.error("Error getting user location:", error);
-                    });
-                } else {
-                    console.log("Geolocation not supported by this browser");
-                }
-            }
-
-            // Send location data to the backend
-            function sendLocation() {
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(function(position) {
-                        var lat = position.coords.latitude;
-                        var lng = position.coords.longitude;
-                        console.log("Sending location with name: " + userName);
-                        fetch(`https://location-share-backend-rubin-gosaliyas-projects.vercel.app/locations/${sessionId}`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ lat, lng, name: userName })
-                        })
-                        .then(response => response.text())
-                        .then(data => console.log("POST response:", data))
-                        .catch(error => console.error("POST error:", error));
-                    }, function(error) {
-                        console.error("Error getting location:", error);
-                    });
-                } else {
-                    alert("Geolocation is not supported by this browser.");
-                }
-            }
-
-            var markers = [];
-
-            // Update the map with locations from the backend
-            function updateMap() {
-                fetch(`https://location-share-backend-rubin-gosaliyas-projects.vercel.app/locations/${sessionId}`, {
-                    method: 'GET'
-                })
-                .then(response => response.json())
-                .then(data => {
-                    // Clear existing markers
-                    markers.forEach(marker => marker.setMap(null));
-                    markers = [];
-
-                    console.log("Fetched locations:", JSON.stringify(data.locations, null, 2));
-
-                    // Check if the location has a name
-                    data.locations.forEach(loc => {
-                        console.log("Location data:", loc); // Log individual location object
-                        var marker = new google.maps.Marker({
-                            position: { lat: loc.lat, lng: loc.lng },
-                            map: map,
-                            label: loc.name ? loc.name : "Unnamed"  // This should correctly display the name if available
-                        });
-                        markers.push(marker);
-                    });
-                })
-                .catch(error => console.error("Error fetching locations:", error));
-            }
-
-            // Call functions to set location, send, and update map
-            setMapToUserLocation();
-            sendLocation();
-            updateMap();
-
-            // Update every 5 seconds
-            setInterval(sendLocation, 5000);
-            setInterval(updateMap, 5000);
-        }
-    </script>
-</body>
-</html>
+// Export the handler for Vercel serverless function
+module.exports = (req, res) => {
+  app(req, res);
+};
