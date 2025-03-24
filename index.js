@@ -11,11 +11,11 @@ app.get('/', (req, res) => {
 app.use(express.json());
 app.use((req, res, next) => {
   console.log(`Request method: ${req.method}, Request URL: ${req.url}`);
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.header('Access-Control-Allow-Origin', '*'); // Allow all origins for now (for testing, can be restricted later)
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'); // Allow these HTTP methods
+  res.header('Access-Control-Allow-Headers', 'Content-Type'); // Allow specific headers
   
-  // Handle preflight requests
+  // Handle preflight requests (OPTIONS)
   if (req.method === 'OPTIONS') {
     console.log('OPTIONS request received, responding with 200');
     return res.status(200).end();
