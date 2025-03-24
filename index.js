@@ -11,16 +11,21 @@ app.use((req, res, next) => {
   next();
 });
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.send('Location Share Backend - Use /createEvent, /updateLocation, or /getLocations');
+});
+
 // Create a new session (optional)
 app.get('/createEvent', async (req, res) => {
   try {
-    const { duration } = req.query; // Duration in hours (e.g., "2.5")
+    const { duration } = req.query;
     const durationHours = parseFloat(duration);
     if (isNaN(durationHours) || durationHours <= 0 || durationHours > 24) {
       return res.status(400).send('Invalid duration: must be between 0 and 24 hours');
     }
     const sessionId = Math.random().toString(36).substr(2, 9);
-    const expirationTime = Date.now() + durationHours * 3600000; // ms
+    const expirationTime = Date.now() + durationHours * 3600000;
     await kv.set(`session:${sessionId}`, { expirationTime }, { ex: Math.ceil(durationHours * 3600) });
     const shareLink = `https://rubingosaliya.github.io/location-share-test/?session=${sessionId}`;
     res.json({ sessionId, shareLink, expiresAt: expirationTime });
@@ -41,7 +46,7 @@ app.post('/updateLocation', async (req, res) => {
       return res.status(200).send('Location ignored due to low accuracy');
     }
 
-    let sessionExpiration = Infinity; // No session = no expiration
+    let sessionExpiration = Infinity;
     if (sessionId) {
       const session = await kv.get(`session:${sessionId}`);
       if (!session || Date.now() > session.expirationTime) {
@@ -53,7 +58,7 @@ app.post('/updateLocation', async (req, res) => {
     const effectiveExpiration = Math.min(shareUntil, sessionExpiration);
     const userKey = sessionId ? `locations:${sessionId}` : `user:${userName}`;
     let locations = (await kv.get(userKey)) || [];
-    locations = locations.filter(loc => loc.name !== userName); // Update existing user
+    locations = locations.filter(loc => loc.name !== userName);
     locations.push({ lat, lng, name: userName, active: Date.now() < effectiveExpiration });
     await kv.set(userKey, locations, { ex: Math.ceil((effectiveExpiration - Date.now()) / 1000) });
     res.send('Location added');
