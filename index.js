@@ -67,15 +67,15 @@ app.post('/updateLocation', async (req, res) => {
         const color = userLoc ? userLoc.color : userName === (await kv.get(`session:${sessionId}`)).creatorName ? '#FF0000' : getColorForUser(userName);
         locations = locations.filter(loc => loc.name !== userName);
         locations.push({ 
-            lat, 
-            lng, 
+            lat: Date.now() < effectiveExpiration ? lat : userLoc.lat, // Keep last known lat
+            lng: Date.now() < effectiveExpiration ? lng : userLoc.lng, // Keep last known lng
             name: userName, 
             active: Date.now() < effectiveExpiration,
             shareStart: shareStart || Date.now(),
             shareUntil: effectiveExpiration,
-            color // Persist color
+            color
         });
-        await kv.set(userKey, locations, { ex: Math.ceil((effectiveExpiration - Date.now()) / 1000) });
+        await kv.set(userKey, locations, { ex: Math.ceil((sessionExpiration - Date.now()) / 1000) }); // Extend to session end
 
         const clientKey = `session:${sessionId}:client:${clientId}`;
         await kv.set(clientKey, { userName, shareUntil }, { ex: Math.ceil((effectiveExpiration - Date.now()) / 1000) });
