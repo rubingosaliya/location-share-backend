@@ -63,14 +63,17 @@ app.post('/updateLocation', async (req, res) => {
         const effectiveExpiration = Math.min(shareUntil, sessionExpiration);
         const userKey = sessionId ? `locations:${sessionId}` : `user:${userName}`;
         let locations = (await kv.get(userKey)) || [];
+        let userLoc = locations.find(loc => loc.name === userName);
+        const color = userLoc ? userLoc.color : userName === (await kv.get(`session:${sessionId}`)).creatorName ? '#FF0000' : getColorForUser(userName);
         locations = locations.filter(loc => loc.name !== userName);
         locations.push({ 
             lat, 
             lng, 
             name: userName, 
             active: Date.now() < effectiveExpiration,
-            shareStart: shareStart || Date.now(), // Store start time
-            shareUntil: effectiveExpiration // Store end time
+            shareStart: shareStart || Date.now(),
+            shareUntil: effectiveExpiration,
+            color // Persist color
         });
         await kv.set(userKey, locations, { ex: Math.ceil((effectiveExpiration - Date.now()) / 1000) });
 
@@ -83,6 +86,15 @@ app.post('/updateLocation', async (req, res) => {
         res.status(500).send('Server error');
     }
 });
+
+function getColorForUser(userName) {
+    const colors = ['#0000FF', '#00FF00', '#800080', '#FFA500', '#00FFFF'];
+    let hash = 0;
+    for (let i = 0; i < userName.length; i++) {
+        hash = userName.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+}
 
 app.get('/getLocations', async (req, res) => {
     try {
@@ -117,7 +129,7 @@ app.get('/getSession', async (req, res) => {
             const clientKey = `session:${sessionId}:client:${clientId}`;
             clientData = (await kv.get(clientKey)) || {};
         }
-        res.json({ creatorName: session.creatorName || 'Anonymous', ...clientData });
+        res.json({ creatorName: session.creatorName || 'Anonymous', expirationTime: session.expirationTime, ...clientData });
     } catch (error) {
         console.error('Error in getSession:', error);
         res.status(500).send('Server error');
