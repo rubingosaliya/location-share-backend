@@ -65,17 +65,22 @@ app.post('/updateLocation', async (req, res) => {
         let locations = (await kv.get(userKey)) || [];
         let userLoc = locations.find(loc => loc.name === userName);
         const color = userLoc ? userLoc.color : userName === (await kv.get(`session:${sessionId}`)).creatorName ? '#FF0000' : getColorForUser(userName);
+        const history = userLoc && userLoc.history ? userLoc.history : [];
+        if (Date.now() < effectiveExpiration) {
+            history.push({ lat, lng, timestamp: Date.now() }); // Add to history if still sharing
+        }
         locations = locations.filter(loc => loc.name !== userName);
         locations.push({ 
-            lat: Date.now() < effectiveExpiration ? lat : userLoc.lat, // Keep last known lat
-            lng: Date.now() < effectiveExpiration ? lng : userLoc.lng, // Keep last known lng
+            lat: Date.now() < effectiveExpiration ? lat : userLoc ? userLoc.lat : lat, 
+            lng: Date.now() < effectiveExpiration ? lng : userLoc ? userLoc.lng : lng, 
             name: userName, 
             active: Date.now() < effectiveExpiration,
             shareStart: shareStart || Date.now(),
             shareUntil: effectiveExpiration,
-            color
+            color,
+            history // Store location history
         });
-        await kv.set(userKey, locations, { ex: Math.ceil((sessionExpiration - Date.now()) / 1000) }); // Extend to session end
+        await kv.set(userKey, locations, { ex: Math.ceil((sessionExpiration - Date.now()) / 1000) });
 
         const clientKey = `session:${sessionId}:client:${clientId}`;
         await kv.set(clientKey, { userName, shareUntil }, { ex: Math.ceil((effectiveExpiration - Date.now()) / 1000) });
