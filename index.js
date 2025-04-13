@@ -24,16 +24,21 @@ app.get('/createEvent', async (req, res) => {
         }
         const sessionId = Math.random().toString(36).substr(2, 9);
         const expirationTime = Date.now() + durationHours * 3600000;
+        const expiresInSeconds = Math.ceil(durationHours * 3600);
+        if (expiresInSeconds <= 0) {
+            throw new Error('Calculated expiration time is invalid');
+        }
         await kv.set(
             `session:${sessionId}`,
             { expirationTime },
-            { ex: Math.ceil(durationHours * 3600) }
+            { ex: expiresInSeconds }
         );
         const shareLink = `https://rubingosaliya.github.io/location-share-test/?session=${sessionId}`;
+        console.log(`Created session: ${sessionId}, expires: ${new Date(expirationTime)}`);
         res.json({ sessionId, shareLink, expiresAt: expirationTime });
     } catch (error) {
-        console.error('Error in createEvent:', error);
-        res.status(500).send('Server error');
+        console.error('Error in createEvent:', error.message, error.stack);
+        res.status(500).send(`Server error: ${error.message}`);
     }
 });
 
@@ -43,8 +48,8 @@ app.post('/updateLocation', async (req, res) => {
         if (!userName || !shareUntil || !clientId) {
             return res.status(400).send('Missing required fields: userName, shareUntil, clientId');
         }
-        if (!lat || !lng) {
-            return res.status(400).send('Missing location data');
+        if (typeof lat !== 'number' || typeof lng !== 'number') {
+            return res.status(400).send('Invalid location data: lat and lng must be numbers');
         }
 
         let sessionExpiration = Infinity;
@@ -55,7 +60,9 @@ app.post('/updateLocation', async (req, res) => {
             }
             if (!session.creatorName) {
                 session.creatorName = userName;
-                await kv.set(`session:${sessionId}`, session, { ex: Math.ceil((session.expirationTime - Date.now()) / 1000) });
+                await kv.set(`session:${sessionId}`, session, {
+                    ex: Math.ceil((session.expirationTime - Date.now()) / 1000)
+                });
             }
             sessionExpiration = session.expirationTime;
         }
@@ -64,31 +71,36 @@ app.post('/updateLocation', async (req, res) => {
         const userKey = sessionId ? `locations:${sessionId}` : `user:${userName}`;
         let locations = (await kv.get(userKey)) || [];
         let userLoc = locations.find(loc => loc.name === userName);
-        const color = userLoc ? userLoc.color : userName === (await kv.get(`session:${sessionId}`)).creatorName ? '#FF0000' : getColorForUser(userName);
+        const color = userLoc ? userLoc.color : userName === (await kv.get(`session:${sessionId}`))?.creatorName ? '#FF0000' : getColorForUser(userName);
         const history = userLoc && userLoc.history ? userLoc.history : [];
         if (Date.now() < effectiveExpiration) {
-            history.push({ lat, lng, timestamp: Date.now() }); // Add to history if still sharing
+            history.push({ lat, lng, timestamp: Date.now() });
         }
         locations = locations.filter(loc => loc.name !== userName);
-        locations.push({ 
-            lat: Date.now() < effectiveExpiration ? lat : userLoc ? userLoc.lat : lat, 
-            lng: Date.now() < effectiveExpiration ? lng : userLoc ? userLoc.lng : lng, 
-            name: userName, 
+        locations.push({
+            lat: Date.now() < effectiveExpiration ? lat : userLoc ? userLoc.lat : lat,
+            lng: Date.now() < effectiveExpiration ? lng : userLoc ? userLoc.lng : lng,
+            name: userName,
             active: Date.now() < effectiveExpiration,
             shareStart: shareStart || Date.now(),
             shareUntil: effectiveExpiration,
             color,
-            history // Store location history
+            history
         });
-        await kv.set(userKey, locations, { ex: Math.ceil((sessionExpiration - Date.now()) / 1000) });
+        await kv.set(userKey, locations, {
+            ex: Math.ceil((sessionExpiration - Date.now()) / 1000)
+        });
 
         const clientKey = `session:${sessionId}:client:${clientId}`;
-        await kv.set(clientKey, { userName, shareUntil }, { ex: Math.ceil((effectiveExpiration - Date.now()) / 1000) });
+        await kv.set(clientKey, { userName, shareUntil }, {
+            ex: Math.ceil((effectiveExpiration - Date.now()) / 1000)
+        });
 
+        console.log(`Updated location for ${userName} in session ${sessionId || 'no-session'}`);
         res.send('Location added');
     } catch (error) {
-        console.error('Error in updateLocation:', error);
-        res.status(500).send('Server error');
+        console.error('Error in updateLocation:', error.message, error.stack);
+        res.status(500).send(`Server error: ${error.message}`);
     }
 });
 
@@ -112,10 +124,11 @@ app.get('/getLocations', async (req, res) => {
         }
 
         let locations = (await kv.get(key)) || [];
+        console.log(`Fetched locations for ${sessionId || userName}:`, locations.length);
         res.json({ locations });
     } catch (error) {
-        console.error('Error in getLocations:', error);
-        res.status(500).send('Server error');
+        console.error('Error in getLocations:', error.message, error.stack);
+        res.status(500).send(`Server error: ${error.message}`);
     }
 });
 
@@ -134,10 +147,11 @@ app.get('/getSession', async (req, res) => {
             const clientKey = `session:${sessionId}:client:${clientId}`;
             clientData = (await kv.get(clientKey)) || {};
         }
+        console.log(`Fetched session ${sessionId} for client ${clientId}`);
         res.json({ creatorName: session.creatorName || 'Anonymous', expirationTime: session.expirationTime, ...clientData });
     } catch (error) {
-        console.error('Error in getSession:', error);
-        res.status(500).send('Server error');
+        console.error('Error in getSession:', error.message, error.stack);
+        res.status(500).send(`Server error: ${error.message}`);
     }
 });
 
